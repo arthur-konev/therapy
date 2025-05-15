@@ -700,8 +700,8 @@ class ModelStructure(models.Model):
         ModelName,
         on_delete=models.CASCADE,
         verbose_name="Модель",
-        blank=False,
-        null=False,
+        blank=True,
+        null=True,
     )
     parameter = models.ForeignKey(
         Parameter,

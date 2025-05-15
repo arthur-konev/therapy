@@ -123,7 +123,10 @@ class ParameterSerializer(serializers.ModelSerializer):
 
     def get_name_unit(self, obj):
         unit = obj.unit
-        result = f"{obj.unit.name}"
+        if unit is not None: 
+            result = f"{obj.unit.name}"
+        else:
+            result = "Не указано" 
         return result
 
 
@@ -144,16 +147,22 @@ class ModelStructureSerializer(serializers.ModelSerializer):
     
     def get_name_model_name(self, obj):
             model_name = obj.model_name
-            result = f"{obj.model_name.name}"
+            if model_name: 
+                result = f"{obj.model_name.name}"
+            else:
+                result = "" 
             return result
     def get_name_parameter(self, obj):
             parameter = obj.parameter
             result = f"{obj.parameter.name}"
             return result
     def get_name_unit(self, obj):
-            parameter = obj.parameter
-            result = f"{obj.parameter.unit.name}"
-            return result
+        parameter = obj.parameter
+        if parameter.unit: 
+            result = f"{parameter.unit.name}"
+        else:
+            result = ""  
+        return result
 
 class ResultSerializer(serializers.ModelSerializer):
     name_model_structure= serializers.SerializerMethodField()
@@ -165,17 +174,23 @@ class ResultSerializer(serializers.ModelSerializer):
 
     def get_name_model_structure(self, obj):
             model_structure = obj.model_structure
-            result = f"{obj.model_structure.model_name.name} "
-            #result = f"{obj.model_structure.model_name}"
+            if model_structure.model_name:
+                result = f"{obj.model_structure.model_name.name} "
+            else:
+                result = "" 
             return result
+        
     def get_name_parameter(self, obj):
             model_structure = obj.model_structure
             result = f"{obj.model_structure.parameter.name}"
             return result
     def get_name_unit(self, obj):
-            model_structure = obj.model_structure
-            result = f"{obj.model_structure.parameter.unit.name}"
-            return result
+        model_structure = obj.model_structure
+        if model_structure.parameter.unit:
+            result = f"{model_structure.parameter.unit.name}"
+        else:
+            result = ""  
+        return result
         
         
 class SourceSerializer(serializers.ModelSerializer):
@@ -196,13 +211,22 @@ class DataSetSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = DataSet
-        fields = ("id", "result", "сlinical_сase", "source", "note","name_result","name_сlinical_сase","name_source")
+        fields = ("id", "result", "сlinical_сase","name_сlinical_сase", "source", "note","name_result","name_source")
         
     
     def get_name_result(self, obj):
-            result = obj.result
-            resultA = f"{obj.result.model_structure.model_name.name} {obj.result.model_structure.parameter.name}={obj.result.value}({obj.result.lower_value}-{obj.result.upper_value})({obj.result.model_structure.parameter.unit.name})"
-            return resultA
+        result = obj.result
+        
+        model_name = result.model_structure.model_name.name if result.model_structure.model_name else "Неизвестная модель"
+        parameter_name = result.model_structure.parameter.name if result.model_structure.parameter else "Без параметра"
+        unit_name = result.model_structure.parameter.unit.name if result.model_structure.parameter and result.model_structure.parameter.unit else ""
+        resultA = f"{model_name} {parameter_name}={result.value}({result.lower_value}-{result.upper_value})"
+        
+        if unit_name:
+            resultA += f" ({unit_name})"
+        
+        return resultA.strip()  
+
     def get_name_сlinical_сase(self, obj):
             сlinical_сase = obj.сlinical_сase
             result = f"{obj.сlinical_сase}"
@@ -212,9 +236,36 @@ class DataSetSerializer(serializers.ModelSerializer):
             result = f"{obj.source}"
             return result
 
+# class DataSetsSerializer(serializers.ModelSerializer):
+#     name_result= serializers.SerializerMethodField()
     
+#     name_source = serializers.SerializerMethodField()
+    
+    
+
+#     class Meta:
+#         model = DataSet
+#         fields = ("name_result","name_source")
+        
+    
+#     def get_name_result(self, obj):
+#             result = obj.result
+#             resultA = f"{obj.result.model_structure.model_name.name} {obj.result.model_structure.parameter.name}={obj.result.value}({obj.result.lower_value}-{obj.result.upper_value})({obj.result.model_structure.parameter.unit.name})"
+#             return resultA
+#     def get_name_source(self, obj):
+#             source = obj.source
+#             result = f"{obj.source}"
+#             return result
+           
 class ClinicalCaseSerializer(serializers.ModelSerializer):
-    datasets = DataSetSerializer(source="dataset_set", many=True, read_only=True)
+    datasets_source_name = serializers.SerializerMethodField()
+    datasets_source_url = serializers.SerializerMethodField()
+    datasets_result_value= serializers.SerializerMethodField()
+    datasets_result_upper_value = serializers.SerializerMethodField()
+    datasets_result_lower_value = serializers.SerializerMethodField()
+    datasets_result_note = serializers.SerializerMethodField()
+    datasets_result_model_structure_name = serializers.SerializerMethodField()
+    datasets_result_model_structure_parameter = serializers.SerializerMethodField()
     
     name_location = serializers.SerializerMethodField()
     name_diagnosis = serializers.SerializerMethodField()
@@ -241,7 +292,7 @@ class ClinicalCaseSerializer(serializers.ModelSerializer):
     text_metastasis = serializers.SerializerMethodField()
     text_histology = serializers.SerializerMethodField()
     text_grade = serializers.SerializerMethodField()
-    
+   
     
     class Meta:
         model = ClinicalCase
@@ -254,7 +305,11 @@ class ClinicalCaseSerializer(serializers.ModelSerializer):
             "name_stage", "name_risk_group", "name_radiation_therapy_type", 
             "name_tumor", "name_node", "name_metastasis", "name_histology", 
             "name_grade", "gender_display","сlinical_сase_text","text_location", "text_diagnosis", "text_complication", "text_stage", "text_risk_group", "text_radiation_therapy_type", "text_tumor", "text_node", "text_metastasis", "text_histology", "text_grade"
-            ,"datasets"
+            ,"datasets_source_name","datasets_source_url","datasets_result_value",
+            "datasets_result_upper_value", 
+            "datasets_result_lower_value", 
+            "datasets_result_note", 
+            "datasets_result_model_structure_name","datasets_result_model_structure_parameter"
             )
 
     def get_сlinical_сase_text(self, obj):
@@ -329,3 +384,58 @@ class ClinicalCaseSerializer(serializers.ModelSerializer):
     def get_text_grade(self, obj):
         return f"{obj.grade}" if obj.grade else None    
     
+    def get_datasets_source_name(self, obj):
+        return [
+            dataset.source.name if dataset.source else None
+            for dataset in obj.dataset_set.all()
+        ]
+    def get_datasets_source_url(self, obj):
+        return [
+             dataset.source.url if dataset.source else None
+            for dataset in obj.dataset_set.all()
+        ]
+    def get_datasets_result_value(self, obj):
+        return [
+           
+                
+                     dataset.result.value if dataset.result else None
+                
+            
+            for dataset in obj.dataset_set.all()
+        ] 
+    def get_datasets_result_upper_value(self, obj):
+        return [
+            dataset.result.upper_value if dataset.result else None
+            for dataset in obj.dataset_set.all()
+        ]
+
+    def get_datasets_result_lower_value(self, obj):
+        return [
+            dataset.result.lower_value if dataset.result else None
+            for dataset in obj.dataset_set.all()
+        ]
+
+    def get_datasets_result_note(self, obj):
+        return [
+            dataset.result.note if dataset.result else None
+            for dataset in obj.dataset_set.all()
+        ]
+
+    def get_datasets_result_model_structure_name(self, obj):
+        return [
+            (
+                dataset.result.model_structure.model_name.name 
+                if dataset.result and 
+                dataset.result.model_structure and 
+                dataset.result.model_structure.model_name 
+                else "Неизвестная модель"
+            ) 
+            for dataset in obj.dataset_set.all()
+        ]
+        
+    
+    def get_datasets_result_model_structure_parameter(self, obj):
+        return [
+            dataset.result.model_structure.parameter.name if dataset.result else None 
+            for dataset in obj.dataset_set.all()
+        ]   
