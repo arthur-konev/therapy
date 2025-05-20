@@ -110,7 +110,11 @@ class Diagnosis(models.Model):
     code = models.CharField(
         max_length=6, unique=True, blank=False, null=False, verbose_name="Код МКБ-10"
     )
-    description = models.TextField(verbose_name="Описание диагноза",blank=False, null=False,)
+    description = models.TextField(
+        verbose_name="Описание диагноза",
+        blank=False,
+        null=False,
+    )
     note = models.TextField(
         blank=True,
         null=True,
@@ -429,13 +433,7 @@ class ClinicalCase(models.Model):
         blank=False,
         null=False,
     )
-    complication = models.ForeignKey(
-        Complication,
-        on_delete=models.SET_NULL,
-        verbose_name="Осложнение",
-        blank=True,
-        null=True,
-    )
+
     stage = models.ForeignKey(
         Stage,
         on_delete=models.SET_NULL,
@@ -537,8 +535,7 @@ class ClinicalCase(models.Model):
             str_look += f"Подробный диагноз: {self.refined_diagnosis}, "
         if self.spec_location:
             str_look += f"Локализация: {self.spec_location}, "
-        if self.complication:
-            str_look += f", Осложнение: {self.complication}"
+
         if self.stage:
             str_look += f", Стадия: {self.stage}"
         if self.risk_group:
@@ -565,7 +562,31 @@ class ClinicalCase(models.Model):
             str_look += f"Доп. информация: {self.note}, "
 
         return str_look[:-2] if str_look else str_look
-    
+
+
+class ClinicalCaseComplication(models.Model):
+
+    clinical_case = models.ForeignKey(
+        ClinicalCase,
+        on_delete=models.CASCADE,
+        verbose_name="Клинический случай",
+        blank=False,
+        null=False,
+    )
+    complication = models.ForeignKey(
+        Complication,
+        on_delete=models.CASCADE,
+        verbose_name="Осложнение",
+        blank=False,
+        null=False,
+    )
+
+    class Meta:
+        verbose_name = "Осложнение клинического случая"
+        verbose_name_plural = "Осложнения клинических случаев"
+
+    def __str__(self):
+        return f"{self.clinical_case} - Осложнение: {self.complication}"
 
 
 # Единицы измерения
@@ -707,8 +728,8 @@ class ModelStructure(models.Model):
         Parameter,
         on_delete=models.CASCADE,
         verbose_name="Параметр",
-        blank=False,
-        null=False,
+        blank=True,
+        null=True,
     )
 
     note = models.TextField(
@@ -724,48 +745,6 @@ class ModelStructure(models.Model):
     def __str__(self):
         str_look = f"Структура модели: {self.model_name}, Параметр: {self.parameter}"
 
-        if self.note:
-            str_look += f", Доп. информация: {self.note}"
-        return str_look
-
-
-# Результаты измерений
-class Result(models.Model):
-
-    model_structure = models.ForeignKey(
-        ModelStructure,
-        on_delete=models.CASCADE,
-        verbose_name="Структура моделей",
-        blank=False,
-        null=False,
-    )
-    value = models.FloatField(
-        verbose_name="Полученное значение",
-        blank=True,
-        null=True,
-    )
-    upper_value = models.FloatField(
-        verbose_name="Верхняя граница",
-        blank=True,
-        null=True,
-    )
-    lower_value = models.FloatField(
-        verbose_name="Нижняя граница",
-        blank=True,
-        null=True,
-    )
-    note = models.TextField(
-        blank=True,
-        null=True,
-        verbose_name="Доп. информация",
-    )
-
-    class Meta:
-        verbose_name = "Результат измерения"
-        verbose_name_plural = "Результаты измерений"
-
-    def __str__(self):
-        str_look = f"{self.model_structure} Результат: {self.value}, Верхняя граница: {self.upper_value}, Нижняя граница: {self.lower_value}"
         if self.note:
             str_look += f", Доп. информация: {self.note}"
         return str_look
@@ -813,15 +792,7 @@ class Source(models.Model):
 # Набор данных
 class DataSet(models.Model):
 
-    result = models.OneToOneField(
-        Result,
-        on_delete=models.CASCADE,
-        verbose_name="Результат",
-        unique=True,
-        blank=False,
-        null=False,
-    )
-    сlinical_сase = models.ForeignKey(
+    clinical_case = models.ForeignKey(
         ClinicalCase,
         on_delete=models.CASCADE,
         verbose_name="Клинический случай",
@@ -846,11 +817,58 @@ class DataSet(models.Model):
         verbose_name_plural = "Наборы данных"
 
     def __str__(self):
-        str_look = f"Результат: {self.result}"
-        if self.сlinical_сase:
-            str_look += f", Клинический случай: {self.сlinical_сase}"
+        str_look = f"Клинический случай: {self.clinical_case}"
         if self.source:
             str_look += f", Источник: {self.source}"
+        if self.note:
+            str_look += f", Доп. информация: {self.note}"
+        return str_look
+
+
+# Результаты измерений
+class Result(models.Model):
+
+    model_structure = models.ForeignKey(
+        ModelStructure,
+        on_delete=models.CASCADE,
+        verbose_name="Структура моделей",
+        blank=False,
+        null=False,
+    )
+    value = models.FloatField(
+        verbose_name="Полученное значение",
+        blank=True,
+        null=True,
+    )
+    upper_value = models.FloatField(
+        verbose_name="Верхняя граница",
+        blank=True,
+        null=True,
+    )
+    lower_value = models.FloatField(
+        verbose_name="Нижняя граница",
+        blank=True,
+        null=True,
+    )
+    note = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name="Доп. информация",
+    )
+    data_set = models.ForeignKey(
+        DataSet,
+        on_delete=models.CASCADE,
+        verbose_name="Набор данных",
+        blank=False,
+        null=True,
+    )
+
+    class Meta:
+        verbose_name = "Результат измерения"
+        verbose_name_plural = "Результаты измерений"
+
+    def __str__(self):
+        str_look = f"{self.model_structure} Результат: {self.value}, Верхняя граница: {self.upper_value}, Нижняя граница: {self.lower_value}"
         if self.note:
             str_look += f", Доп. информация: {self.note}"
         return str_look

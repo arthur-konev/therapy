@@ -21,7 +21,8 @@ from .models import (
     Grade, 
     Tumor, 
     Node, 
-    Metastasis, 
+    Metastasis,
+    ClinicalCaseComplication  
 )
 
 
@@ -45,3 +46,4 @@ admin.site.register(Grade)
 admin.site.register(Tumor)
 admin.site.register(Node)
 admin.site.register(Metastasis)
+admin.site.register(ClinicalCaseComplication)
