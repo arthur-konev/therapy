@@ -174,13 +174,14 @@ class ResultSerializer(serializers.ModelSerializer):
     name_data_set = serializers.SerializerMethodField()
     class Meta:
         model = Result
-        fields = ("id", "model_structure", "value", "upper_value", "lower_value", "note","name_model_structure",
+        fields = ("id", "model_structure", "value", "upper_value", 
+                  "lower_value", "note","name_model_structure",
                   "name_parameter","name_unit","data_set","name_data_set",)
 
     def get_name_data_set(self, obj):
-            data_set = obj.data_set
-            result = f"{obj.data_set.source.name}"
-            return result
+        if obj.data_set and obj.data_set.source:
+            return f"{obj.data_set.source.name}"
+        return None
         
     def get_name_model_structure(self, obj):
             model_structure = obj.model_structure
@@ -194,6 +195,7 @@ class ResultSerializer(serializers.ModelSerializer):
             model_structure = obj.model_structure
             result = f"{obj.model_structure.parameter.name}"
             return result
+    
     def get_name_unit(self, obj):
         model_structure = obj.model_structure
         if model_structure.parameter.unit:
@@ -218,15 +220,10 @@ class DataSetSerializer(serializers.ModelSerializer):
     name_source = serializers.SerializerMethodField()
     url_source = serializers.SerializerMethodField()
     
-    
-
     class Meta:
         model = DataSet
         fields = ("id",  "clinical_case","name_clinical_case", "source", "note","name_source","url_source",)
         
-    
-
-
     def get_name_clinical_case(self, obj):
             clinical_case = obj.clinical_case
             result = f"{obj.clinical_case}"
@@ -256,12 +253,11 @@ class ClinicalCaseComplicationSerializer (serializers.ModelSerializer):
 
            
 class ClinicalCaseSerializer(serializers.ModelSerializer):
-    datasets_source_name = serializers.SerializerMethodField()
-    datasets_source_url = serializers.SerializerMethodField()
-    
     name_location = serializers.SerializerMethodField()
     name_diagnosis = serializers.SerializerMethodField()
-    
+    datasets_result = serializers.SerializerMethodField()
+    complications = serializers.SerializerMethodField()
+   
     name_stage = serializers.SerializerMethodField()
     name_risk_group = serializers.SerializerMethodField()
     name_radiation_therapy_type = serializers.SerializerMethodField()
@@ -270,6 +266,8 @@ class ClinicalCaseSerializer(serializers.ModelSerializer):
     name_metastasis = serializers.SerializerMethodField()
     name_histology = serializers.SerializerMethodField()
     name_grade = serializers.SerializerMethodField()
+    datasets_source_name = serializers.SerializerMethodField()
+    datasets_source_url = serializers.SerializerMethodField()
     gender_display = serializers.SerializerMethodField()
     clinical_case_text= serializers.SerializerMethodField()
     
@@ -284,7 +282,7 @@ class ClinicalCaseSerializer(serializers.ModelSerializer):
     text_metastasis = serializers.SerializerMethodField()
     text_histology = serializers.SerializerMethodField()
     text_grade = serializers.SerializerMethodField()
-   
+    
     
     class Meta:
         model = ClinicalCase
@@ -297,19 +295,31 @@ class ClinicalCaseSerializer(serializers.ModelSerializer):
             "name_stage", "name_risk_group", "name_radiation_therapy_type", 
             "name_tumor", "name_node", "name_metastasis", "name_histology", 
             "name_grade", "gender_display","clinical_case_text","text_location", "text_diagnosis",  "text_stage", "text_risk_group", "text_radiation_therapy_type", "text_tumor", "text_node", "text_metastasis", "text_histology", "text_grade"
-            ,"datasets_source_name","datasets_source_url",
+            ,"datasets_source_name","datasets_source_url","datasets_result","complications"
             )
 
-    def get_clinical_case_text(self, obj):
-        return f"{obj}"
+    def get_complications(self, obj):
+        complications = ClinicalCaseComplication.objects.filter(clinical_case=obj).select_related("complication")
+        return ClinicalCaseComplicationSerializer(complications, many=True).data
+    
+    
+    def get_datasets_result(self, obj):
+        all_results = Result.objects.filter(data_set__clinical_case=obj).select_related(
+            "model_structure__parameter__unit",
+            "model_structure__model_name",
+            "data_set__source"
+        )
+        return ResultSerializer(all_results, many=True).data
+    
     def get_name_location(self, obj):
         return obj.spec_location.name if obj.spec_location else None
 
     def get_name_diagnosis(self, obj):
         return obj.diagnosis.code if obj.diagnosis else None
 
+    def get_clinical_case_text(self, obj):
+        return f"{obj}"
     
-
     def get_name_stage(self, obj):
         return obj.stage.name if obj.stage else None
 
@@ -380,4 +390,6 @@ class ClinicalCaseSerializer(serializers.ModelSerializer):
              dataset.source.url if dataset.source else None
             for dataset in obj.dataset_set.all()
         ]
-    
+
+
+ 

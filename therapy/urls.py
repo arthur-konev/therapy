@@ -42,7 +42,11 @@ router.register(prefix="node", viewset=views.NodeViewSet, basename="node")
 router.register(
     prefix="metastasis", viewset=views.MetastasisViewSet, basename="metastasis"
 )
+router.register(
+    prefix="aggregate-metrics", viewset=views.AggregatedMetricsView, basename="aggregate-metrics"
+)
 
 urlpatterns = [
     path("", include(router.urls)),
 ]
+

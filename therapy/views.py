@@ -1,4 +1,7 @@
 from django.shortcuts import render
+from rest_framework import status
+from rest_framework.response import Response
+from rest_framework.decorators import action
 from .models import (
     Location,
     SpecLocation,
@@ -52,6 +55,10 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.parsers import JSONParser
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework import generics, viewsets, permissions, filters
+
+from django.db.models import Count
+from collections import defaultdict
+from rest_framework.views import APIView
 
 # from .permissions import NotBobPermission
 
@@ -124,6 +131,31 @@ class SpecLocationViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
 
         return SpecLocation.objects.all()
+
+
+class SpecLocationViewSet(viewsets.ModelViewSet):
+    serializer_class = SpecLocationSerializer
+    permission_classes = (permissions.IsAuthenticated,) 
+
+    filter_backends = [
+        DjangoFilterBackend,    
+        filters.SearchFilter,   
+        filters.OrderingFilter, 
+    ]
+    
+    # Поля, по которым можно фильтровать результаты через параметры запроса.
+    filterset_fields = ["location", "name"]
+    # Например, поиск по имени, заметкам, а также по имени связанной локализации.
+    search_fields = ["name", "note", "location__name"]
+    # Поля, по которым можно сортировать результаты.
+    ordering_fields = ["name", "location", "note"]
+    
+    # Поле сортировки по умолчанию, если пользователь не указал иное.
+    ordering = ["name"]
+
+    def get_queryset(self):
+        return SpecLocation.objects.all()
+
 
 
 class DiagnosisViewSet(viewsets.ModelViewSet):
@@ -284,7 +316,7 @@ class MetastasisViewSet(viewsets.ModelViewSet):
 class ClinicalCaseViewSet(viewsets.ModelViewSet):
 
     serializer_class = ClinicalCaseSerializer
-    permission_classes = (permissions.IsAuthenticatedOrReadOnly,)
+    permission_classes = (permissions.IsAuthenticated,)
 
     def get_queryset(self):
         queryset = ClinicalCase.objects.all()
@@ -312,6 +344,13 @@ class ClinicalCaseViewSet(viewsets.ModelViewSet):
         )
         single_dose_filter = self.request.query_params.get("single_dose")
         treatment_duration_filter = self.request.query_params.get("treatment_duration")
+        
+        result_filter = self.request.query_params.get("result")
+        dataset_filter = self.request.query_params.get("dataset")
+        source_filter = self.request.query_params.get("source")
+        model_structure_filter = self.request.query_params.get("model_structure")
+        model_name_filter = self.request.query_params.get("model_name")
+        parameter_filter = self.request.query_params.get("parameter")
 
         location_list = []
         age_list = []
@@ -333,6 +372,30 @@ class ClinicalCaseViewSet(viewsets.ModelViewSet):
         single_dose_list = []
         treatment_duration_list = []
 
+        if result_filter:
+            result_list = result_filter.split(",")
+            queryset = queryset.filter(dataset__result__in=result_list)
+
+        if dataset_filter:
+            dataset_list = dataset_filter.split(",")
+            queryset = queryset.filter(dataset__in=dataset_list)
+
+        if source_filter:
+            source_list = source_filter.split(",")
+            queryset = queryset.filter(dataset__source__in=source_list)
+
+        if model_structure_filter:
+            ms_list = model_structure_filter.split(",")
+            queryset = queryset.filter(dataset__result__model_structure__in=ms_list)
+
+        if model_name_filter:
+            mn_list = model_name_filter.split(",")
+            queryset = queryset.filter(dataset__result__model_structure__model_name__in=mn_list)
+
+        if parameter_filter:
+            param_list = parameter_filter.split(",")
+            queryset = queryset.filter(dataset__result__model_structure__parameter__in=param_list)
+            
         if age_filter:
             age_list = age_filter.split(",")
             queryset = queryset.filter(age__in=age_list)
@@ -359,7 +422,7 @@ class ClinicalCaseViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(spec_location__in=spec_location_list)
         if complication_filter:
             complication_list = complication_filter.split(",")
-            queryset = queryset.filter(complication__in=complication_list)
+            queryset = queryset.filter(clinicalcasecomplication__complication__in=complication_list)
         if stage_filter:
             stage_list = stage_filter.split(",")
             queryset = queryset.filter(stage__in=stage_list)
@@ -398,6 +461,21 @@ class ClinicalCaseViewSet(viewsets.ModelViewSet):
 
         return queryset
 
+    def create(self, request, *args, **kwargs):
+        # если пришёл список – делаем bulk_create
+        if isinstance(request.data, list):
+            serializers = [ self.get_serializer(data=item) for item in request.data ]
+            # проверяем валидность каждого
+            for ser in serializers:
+                ser.is_valid(raise_exception=True)
+            # собираем списком объекты (но не сохраняем через .save())
+            objs = [ ClinicalCase(**ser.validated_data) for ser in serializers ]
+            ClinicalCase.objects.bulk_create(objs)
+            # формируем ответ – можно вернуть просто список «id» новых объектов
+            created_ids = [ obj.id for obj in objs ]
+            return Response({'created_ids': created_ids}, status=status.HTTP_201_CREATED)
+        # иначе – как обычно
+        return super().create(request, *args, **kwargs)
 
 class UnitViewSet(viewsets.ModelViewSet):
     serializer_class = UnitSerializer
@@ -452,7 +530,7 @@ class ModelNameViewSet(viewsets.ModelViewSet):
 
 class ModelStructureViewSet(viewsets.ModelViewSet):
     serializer_class = ModelStructureSerializer
-    permission_classes = (permissions.IsAuthenticated,)
+    permission_classes = (permissions.IsAuthenticated,) 
     filter_backends = [
         DjangoFilterBackend,
         filters.SearchFilter,
@@ -485,38 +563,23 @@ class ModelStructureViewSet(viewsets.ModelViewSet):
 
 class ResultViewSet(viewsets.ModelViewSet):
     serializer_class = ResultSerializer
-    permission_classes = (permissions.IsAuthenticatedOrReadOnly,)
+    permission_classes = (permissions.IsAuthenticated,)
     filter_backends = [
         DjangoFilterBackend,
         filters.SearchFilter,
         filters.OrderingFilter,
     ]
-    filterset_fields = [
-        "model_structure",
-        "value",
-        "upper_value",
-        "lower_value",
-        "note",
+    filterset_fields = ["model_structure","value", "upper_value","lower_value","note",
     ]
     search_fields = [
-        "model_structure__model_name__name",
-        "model_structure__model_name__full_name",
+        "model_structure__model_name__name","model_structure__model_name__full_name",
         "model_structure__model_name__model_type",
-        "model_structure__parameter__full_name",
-        "model_structure__parameter__name",
-        "model_structure__parameter__unit__name",
-        "model_structure__parameter__unit__full_name",
-        "value",
-        "upper_value",
-        "lower_value",
-        "note",
+        "model_structure__parameter__full_name","model_structure__parameter__name",
+        "model_structure__parameter__unit__name","model_structure__parameter__unit__full_name",
+        "value","upper_value","lower_value","note",
     ]
     ordering_fields = [
-        "model_structure",
-        "value",
-        "upper_value",
-        "lower_value",
-        "note",
+        "model_structure","value","upper_value","lower_value","note",
     ]
     ordering = ["model_structure"]
 
@@ -569,3 +632,85 @@ class DataSetViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return DataSet.objects.all()
+
+class AggregatedMetricsView(viewsets.ViewSet):
+    permission_classes = (permissions.IsAuthenticatedOrReadOnly,)
+
+    def create(self, request):
+        clinical_case_ids = request.data.get("clinical_case_ids", [])
+
+        # Получаем результаты с привязкой к клиническим случаям
+        results = Result.objects.filter(
+            data_set__clinical_case__id__in=clinical_case_ids,
+            value__isnull=False
+        ).select_related(
+            'model_structure__model_name',
+            'model_structure__parameter',
+            'model_structure__parameter__unit',
+            'data_set__clinical_case'
+        )
+
+        # Считаем уникальные случаи и общее количество результатов
+        unique_case_count = ClinicalCase.objects.filter(id__in=clinical_case_ids).distinct().count()
+        total_result_count = results.count()
+
+        # Группируем значения
+        grouped_data = defaultdict(list)
+
+        for r in results:
+            model = r.model_structure.model_name.name if r.model_structure and r.model_structure.model_name else None
+            param = r.model_structure.parameter.name if r.model_structure and r.model_structure.parameter else "N/A"
+            unit = r.model_structure.parameter.unit.name if (
+                r.model_structure and 
+                r.model_structure.parameter and 
+                r.model_structure.parameter.unit
+            ) else ""
+
+            case = r.data_set.clinical_case
+            meta = {
+                "value": r.value,
+                "number_of_fractions": case.number_of_fractions,
+                "single_dose": case.single_dose,
+                "treatment_duration": case.treatment_duration,
+                "clinical_case_id": case.id 
+            }
+
+            grouped_data[(model, param, unit)].append(meta)
+
+        # Формируем ответ
+        aggregated = []
+        for (model, param, unit), entries in grouped_data.items():
+            values = [e["value"] for e in entries]
+            avg = sum(values) / len(values)
+
+            min_entry = min(entries, key=lambda x: x["value"])
+            max_entry = max(entries, key=lambda x: x["value"])
+
+            aggregated.append({
+                "model": model,
+                "parameter": param,
+                "unit": unit,
+                "count": len(values),
+                "average": round(avg, 2),
+                "min_value": round(min_entry["value"], 2),
+                "min_meta": {
+                    "number_of_fractions": min_entry["number_of_fractions"],
+                    "single_dose": min_entry["single_dose"],
+                    "treatment_duration": min_entry["treatment_duration"],
+                    "clinical_case_id": min_entry["clinical_case_id"]
+                },
+                "max_value": round(max_entry["value"], 2),
+                "max_meta": {
+                    "number_of_fractions": max_entry["number_of_fractions"],
+                    "single_dose": max_entry["single_dose"],
+                    "treatment_duration": max_entry["treatment_duration"],
+                    "clinical_case_id": max_entry["clinical_case_id"]
+                }
+            })
+
+        return Response({
+            "clinical_case_count": unique_case_count,
+            "result_count": total_result_count,
+            "aggregated_parameters": aggregated
+        })
+        
